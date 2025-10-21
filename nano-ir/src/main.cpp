@@ -14,15 +14,24 @@ void setup() {
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
-  display.println("Ready to show....");
-  display.display();
+  // display.println("Ready to show....");
+  // display.display();
 }
 
 void loop() {
   display.clearDisplay();
   display.setCursor(0, 0);
   display.setTextSize(1);
-  display.println("Ready to show....");
+  display.print("Thinking.");
   display.display();
-  delay(2000);
+  delay(1000);
+  display.print(".");
+  display.display();
+  delay(1000);
+  display.print(".");
+  display.display();
+  delay(1000);
+  display.print(".");
+  display.display();
+  delay(1000);
 }
