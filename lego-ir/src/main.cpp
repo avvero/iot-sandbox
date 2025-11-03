@@ -1,57 +1,70 @@
 #include <Arduino.h>
 #include "PowerFunctions.h"
 
-// create a power functions instance
-PowerFunctions powerFunctions(3, 0); //Pin 12, Channel 0
+#define IR_PIN 3
+PowerFunctions pf(IR_PIN, 0);
 
-void setup()
-{
+// Joystick
+#define JOY_X A0
+#define JOY_Y A1
+#define JOY_BTN 7
+
+const int deadZone = 60;
+const int maxSpeed = 7;
+const int refresh = 40;  // ms
+
+int L = 0, R = 0;
+unsigned long lastSend = 0;
+
+int stick(int v) {
+  v -= 512;
+  if (abs(v) < deadZone) return 0;
+  v = map(v, -512, 512, -maxSpeed, maxSpeed);
+  return constrain(v, -maxSpeed, maxSpeed);
+}
+
+void driveLR(int l, int r) {
+  pf.single_pwm(PowerFunctionsPort::RED,  pf.speedToPwm(l * 15));
+  pf.single_pwm(PowerFunctionsPort::BLUE, pf.speedToPwm(r * 15));
+  lastSend = millis();
+}
+
+void brake() {
+  pf.single_pwm(PowerFunctionsPort::RED,  PowerFunctionsPwm::BRAKE);
+  pf.single_pwm(PowerFunctionsPort::BLUE, PowerFunctionsPwm::BRAKE);
+}
+
+void setup() {
+  pinMode(JOY_BTN, INPUT_PULLUP);
   Serial.begin(115200);
 }
 
-// main loop
-void loop()
-{
-  delay(1000);
-  for (int i = 0; i < 110; i += 10)
-  {
-    PowerFunctionsPwm pwm = powerFunctions.speedToPwm(i);
-    powerFunctions.single_pwm(PowerFunctionsPort::RED, pwm);
-    Serial.print("single_pwm | speed: ");
-    Serial.print(i);
-    Serial.print(" pwm: ");
-    Serial.println((uint8_t)pwm, HEX);
-    delay(1000);
+void loop() {
+  int X = stick(analogRead(JOY_X));
+  int Y = stick(analogRead(JOY_Y));
+
+  bool turbo = (digitalRead(JOY_BTN) == LOW);
+
+  int targetL = constrain(Y + X, -maxSpeed, maxSpeed);
+  int targetR = constrain(Y - X, -maxSpeed, maxSpeed);
+
+  if (turbo) {
+    if (targetL != 0) targetL = (targetL > 0 ? maxSpeed : -maxSpeed);
+    if (targetR != 0) targetR = (targetR > 0 ? maxSpeed : -maxSpeed);
   }
 
-  for (int i = 0; i < 7; i++)
-  {
-    Serial.println("single_decrement");
-    powerFunctions.single_decrement(PowerFunctionsPort::RED);
-    delay(1000);
+  // Fail-safe: если джойстик в центре → стоп
+  if (targetL == 0 && targetR == 0) {
+    brake();
+    delay(refresh);
+    return;
   }
 
-  for (int i = 0; i < 3; i++)
-  {
-    Serial.println("single_increment");
-    powerFunctions.single_increment(PowerFunctionsPort::RED);
-    delay(1000);
+  driveLR(targetL, targetR);
+  delay(refresh);
+
+  // Fail-safe: потеря связи → стоп
+  if (millis() - lastSend > 500) {
+    brake();
   }
-
-  for (int i = 0; i < 10; i++)
-  {
-    Serial.println("single_decrement");
-    powerFunctions.single_decrement(PowerFunctionsPort::RED);
-    delay(1000);
-  }
-
-
-  Serial.println("combo_pwm");
-  powerFunctions.combo_pwm(PowerFunctionsPwm::FORWARD2, PowerFunctionsPwm::REVERSE3);
-  delay(1000);
-
-  Serial.println("single_pwm BRAKE");
-  powerFunctions.single_pwm(PowerFunctionsPort::RED, PowerFunctionsPwm::BRAKE, 0);
-  powerFunctions.single_pwm(PowerFunctionsPort::BLUE, PowerFunctionsPwm::BRAKE, 0);
-
-} // End of loop
+}
